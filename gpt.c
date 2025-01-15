@@ -50,12 +50,12 @@ void tensor_print_data(tensor *t)
 
 float *tensor_malloc_data(int flat_length)
 {
-	float *d = calloc(flat_length, sizeof(float));
+	float *d = malloc(flat_length * sizeof(float));
 	return d;
 }
 tensor *tensor_malloc()
 {
-	tensor *t = calloc(1, sizeof(tensor));
+	tensor *t = malloc(sizeof(tensor));
 	return t;
 }
 void tensor_free(tensor *t)
@@ -66,17 +66,22 @@ void tensor_free(tensor *t)
 tensor *tensor_zeros(int shape[DIMS_MAX])
 {
 	tensor *t = tensor_malloc();
-	t->data = tensor_malloc_data(tensor_flat_length(t));
 	for (int i = 0; i < DIMS_MAX; i++)
 	{
 		t->shape[i] = shape[i];
+	}
+	int flat_length = tensor_flat_length(t);
+	t->data = tensor_malloc_data(flat_length);
+	for (int i = 0; i < flat_length; i++)
+	{
+		t->data[i] = 0.0;
 	}
 	return t;
 }
 tensor *tensor_arange(float start, float stop, float step)
 {
 	float flat_length = (int)((stop - start) / step) + 1;
-	tensor *t = tensor_zeros((int[DIMS_MAX]){flat_length});
+	tensor *t = tensor_zeros((int[DIMS_MAX]){flat_length, 1});
 	for (int i = 0; i < flat_length; i++)
 	{
 		t->data[i] = start + i * step;
@@ -87,7 +92,10 @@ tensor *tensor_arange(float start, float stop, float step)
 tensor *tensor_ones(int shape[DIMS_MAX])
 {
 	tensor *t = tensor_zeros(shape);
-	memset(t->data, 1, tensor_flat_length(t) * sizeof(float));
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		t->data[i] = 1.0;
+	}
 	return t;
 }
 
@@ -99,7 +107,7 @@ void linear_regression_example()
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
 	tensor *x = tensor_arange(0, 10, 1);
 	tensor *y = tensor_arange(0, 10, 1);
-	tensor *y_hat = tensor_ones((int[DIMS_MAX]){11});
+	tensor *y_hat = tensor_ones(y->shape);
 
 	tensor_print(x);
 	tensor_print(y);
