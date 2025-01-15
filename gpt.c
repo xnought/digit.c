@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DIMS_MAX 10
+#define DIMS_MAX 3
 
 typedef struct tensor
 {
