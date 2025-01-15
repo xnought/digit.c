@@ -50,12 +50,12 @@ void tensor_print_data(tensor *t)
 
 float *tensor_malloc_data(int flat_length)
 {
-	float *d = calloc(sizeof(float) * flat_length);
+	float *d = calloc(flat_length, sizeof(float));
 	return d;
 }
 tensor *tensor_malloc()
 {
-	tensor *t = calloc(sizeof(tensor));
+	tensor *t = calloc(1, sizeof(tensor));
 	return t;
 }
 void tensor_free(tensor *t)
