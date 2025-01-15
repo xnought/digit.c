@@ -38,13 +38,15 @@ void tensor_print_data(tensor *t)
 	}
 	printf("\n");
 }
-void tensor_print(tensor *t)
-{
-	printf("=====Tensor=====\n");
-	tensor_print_shape(t);
-	tensor_print_data(t);
-	printf("================\n");
-}
+
+#define tensor_print(tensor_pointer) (           \
+	{                                            \
+		printf("=====Tensor=====\n");            \
+		printf("Name: '" #tensor_pointer "'\n"); \
+		tensor_print_shape(tensor_pointer);      \
+		tensor_print_data(tensor_pointer);       \
+		printf("================\n");            \
+	})
 
 float *tensor_malloc_data(int flat_length)
 {
@@ -89,7 +91,13 @@ void linear_regression_example()
 	printf("1. Define the dataset to do lin reg on.\n");
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
 	tensor *x = tensor_arange(0, 10, 1);
+	tensor *y = tensor_arange(0, 10, 1);
+
 	tensor_print(x);
+	tensor_print(y);
+
+	tensor_free(x);
+	tensor_free(y);
 }
 
 int main()
