@@ -61,17 +61,6 @@ void tensor_free(tensor *t)
 	free(t->data);
 	free(t);
 }
-
-tensor *tensor_arange(float start, float stop, float step)
-{
-	float flat_length = (int)((stop - start) / step) + 1;
-	tensor *t = tensor_empty({flat_length});
-	for (int i = 0; i < flat_length; i++)
-	{
-		t->data[i] = start + i * step;
-	}
-	return t;
-}
 tensor *tensor_empty(int shape[DIMS_MAX])
 {
 	tensor *t = tensor_malloc();
@@ -79,6 +68,16 @@ tensor *tensor_empty(int shape[DIMS_MAX])
 	for (int i = 0; i < DIMS_MAX; i++)
 	{
 		t->shape[i] = shape[i];
+	}
+	return t;
+}
+tensor *tensor_arange(float start, float stop, float step)
+{
+	float flat_length = (int)((stop - start) / step) + 1;
+	tensor *t = tensor_empty((int[DIMS_MAX]){flat_length});
+	for (int i = 0; i < flat_length; i++)
+	{
+		t->data[i] = start + i * step;
 	}
 	return t;
 }
