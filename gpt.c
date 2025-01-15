@@ -39,23 +39,23 @@ void tensor_print_data(tensor *t)
 	printf("\n");
 }
 
-#define tensor_print(tensor_pointer) (           \
-	{                                            \
-		printf("=====Tensor=====\n");            \
-		printf("Name: '" #tensor_pointer "'\n"); \
-		tensor_print_shape(tensor_pointer);      \
-		tensor_print_data(tensor_pointer);       \
-		printf("================\n");            \
+#define tensor_print(tensor_pointer) (                    \
+	{                                                     \
+		printf("=====Tensor=====\n");                     \
+		printf("Variable Name: '" #tensor_pointer "'\n"); \
+		tensor_print_shape(tensor_pointer);               \
+		tensor_print_data(tensor_pointer);                \
+		printf("================\n");                     \
 	})
 
 float *tensor_malloc_data(int flat_length)
 {
-	float *d = (float *)malloc(sizeof(float) * flat_length);
+	float *d = malloc(sizeof(float) * flat_length);
 	return d;
 }
 tensor *tensor_malloc()
 {
-	tensor *t = (tensor *)malloc(sizeof(tensor));
+	tensor *t = malloc(sizeof(tensor));
 	return t;
 }
 void tensor_free(tensor *t)
