@@ -112,7 +112,7 @@ tensor *tensor_ones(int shape[DIMS_MAX])
 	return t;
 }
 
-tensor *tensor_sum(tensor *t)
+tensor *ops_sum(tensor *t)
 {
 	tensor *sum = tensor_zeros((int[DIMS_MAX]){1, 1});
 	for (int i = 0; i < tensor_flat_length(t); i++)
@@ -132,7 +132,7 @@ void tensor_assert_same_shape(tensor *a, tensor *b)
 	}
 }
 
-tensor *tensor_add(tensor *a, tensor *b)
+tensor *ops_add(tensor *a, tensor *b)
 {
 	tensor_assert_same_shape(a, b);
 	tensor *output = tensor_zeros(a->shape);
@@ -145,9 +145,9 @@ tensor *tensor_add(tensor *a, tensor *b)
 	return output;
 }
 
-tensor *tensor_square(tensor *t)
+tensor *ops_square(tensor *t)
 {
-	tensor *output = tensor_zeros(a->shape);
+	tensor *output = tensor_zeros(t->shape);
 	for (int i = 0; i < tensor_flat_length(t); i++)
 	{
 		float t_i = t->data[i];
@@ -158,7 +158,7 @@ tensor *tensor_square(tensor *t)
 	return output;
 }
 
-tensor *tensor_sub(tensor *a, tensor *b)
+tensor *ops_sub(tensor *a, tensor *b)
 {
 	tensor_assert_same_shape(a, b);
 	tensor *output = tensor_zeros(a->shape);
@@ -168,7 +168,22 @@ tensor *tensor_sub(tensor *a, tensor *b)
 		a->grad[i] = 1.0;						   // backward
 		b->grad[i] = -1.0;						   // backward
 	}
+
 	return output;
+}
+
+tensor *loss_mse(tensor *a, tensor *b)
+{
+	tensor_assert_same_shape(a, b);
+
+	tensor *sub = ops_sub(a, b);
+	tensor *sqr = ops_square(sub);
+	tensor *sum = ops_sum(sqr);
+
+	tensor_free(sub);
+	tensor_free(sqr);
+
+	return sum;
 }
 
 void linear_regression_example()
@@ -179,23 +194,18 @@ void linear_regression_example()
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
 	tensor *x = tensor_arange(0, 5, 1);
 	tensor *y = tensor_arange(0, 5, 1);
-	// tensor *y_hat = tensor_zeros(y->shape); // empty
+	tensor *y_hat = tensor_ones(y->shape);
 
-	printf("Before\n");
 	tensor_print(x);
 	tensor_print(y);
-	// tensor_print(y_hat);
+	tensor_print(y_hat);
 
-	tensor *res = tensor_add(x, y);
-	printf("After\n");
-	tensor_print(res);
-	tensor_print(x);
-	tensor_print(y);
+	tensor *loss = loss_mse(y, y_hat);
+	tensor_print(loss);
 
 	tensor_free(x);
 	tensor_free(y);
-	tensor_free(res);
-	// tensor_free(y_hat);
+	tensor_free(y_hat);
 }
 
 int main()
