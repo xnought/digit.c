@@ -7,15 +7,49 @@
 #define OPS_ARGS_MAX 2
 #define t_shape int[SHAPE_MAX]
 
+typedef enum
+{
+	NO_OP,
+	SUM,
+	SQUARE,
+	SUB,
+} op_t;
+
 typedef struct tensor
 {
 	int shape[SHAPE_MAX];
 	float *data; // points to the 1d points of data
 	float *grad;
 	struct tensor *ops_args[OPS_ARGS_MAX]; // tensors used in an ops function args
+	op_t op;
 	int transposed;
 } tensor;
 
+void tensor_print_op(tensor *t)
+{
+	printf("Op:\t");
+
+	switch (t->op)
+	{
+	case SUB:
+		printf("SUB");
+		break;
+	case SQUARE:
+		printf("SQUARE");
+		break;
+	case SUM:
+		printf("SUM");
+		break;
+	case NO_OP:
+		printf("NO_OP");
+		break;
+	default:
+		printf("??");
+		break;
+	}
+
+	printf("\n");
+}
 void tensor_print_shape(tensor *t)
 {
 	printf("Shape:\t");
@@ -76,6 +110,7 @@ void tensor_print2d(tensor *m)
 		tensor_print_shape(tensor_pointer);               \
 		tensor_print_data(tensor_pointer);                \
 		tensor_print_grad(tensor_pointer);                \
+		tensor_print_op(tensor_pointer);                  \
 		printf("================\n\n");                   \
 	})
 
@@ -92,6 +127,7 @@ tensor *tensor_malloc()
 		t->ops_args[i] = NULL;
 	}
 	t->transposed = 0;
+	t->op = NO_OP;
 	return t;
 }
 void tensor_free(tensor *t)
@@ -163,6 +199,7 @@ tensor *ops_sum(tensor *t)
 		output->data[0] += t->data[i];
 	}
 
+	output->op = SUM;
 	output->ops_args[0] = t;
 
 	return output;
@@ -190,6 +227,7 @@ tensor *ops_square(tensor *t)
 		output->data[i] = t_i * t_i;
 	}
 
+	output->op = SQUARE;
 	output->ops_args[0] = t;
 
 	return output;
@@ -203,6 +241,7 @@ tensor *ops_sub(tensor *a, tensor *b)
 		output->data[i] = a->data[i] - b->data[i];
 	}
 
+	output->op = SUB;
 	output->ops_args[0] = a;
 	output->ops_args[1] = b;
 
@@ -276,6 +315,9 @@ void graph_free(tensor *node)
 
 void chain_backprop(tensor *parent, tensor *child)
 {
+	// Let's suppose the parent is y
+	// and that the child args are x @ w
+	// To get dL/dw I need to do dL/dy * dy/dw = dL/dy * x.T
 	for (int i = 0; i < tensor_flat_length(child); i++)
 	{
 		if (tensor_flat_length(parent) == 1)
@@ -290,15 +332,64 @@ void chain_backprop(tensor *parent, tensor *child)
 	}
 }
 
-void graph_backprop(tensor *node)
+void ops_sum_backprop(tensor *output)
 {
+	tensor *a = output->ops_args[0];
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		a->grad[i] = 1.0;			   // local
+		a->grad[i] *= output->grad[0]; // chain rule
+	}
+}
+void ops_square_backprop(tensor *output)
+{
+	tensor *a = output->ops_args[0];
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		a->grad[i] = 2 * a->data[i];   // local
+		a->grad[i] *= output->grad[i]; // chain rule
+	}
+}
+void ops_sub_backprop(tensor *output)
+{
+	tensor *a = output->ops_args[0];
+	tensor *b = output->ops_args[1];
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		a->grad[i] = 1.0;			   // local
+		b->grad[i] = -1.0;			   // local
+		a->grad[i] *= output->grad[i]; // chain rule
+		b->grad[i] *= output->grad[i]; // chain rule
+	}
+}
+
+void graph_backprop(tensor *output)
+{
+	switch (output->op)
+	{
+	case SUB:
+		ops_sub_backprop(output);
+		break;
+	case SQUARE:
+		ops_square_backprop(output);
+		break;
+	case SUM:
+		output->grad[0] = 1.0; // reduce grad
+		ops_sum_backprop(output);
+		break;
+	case NO_OP:
+		return;
+	default:
+		exit(1);
+		break;
+	}
+
 	for (int i = 0; i < OPS_ARGS_MAX; i++)
 	{
-		tensor *op = node->ops_args[i];
-		if (op != NULL)
+		tensor *child = output->ops_args[i];
+		if (child != NULL)
 		{
-			chain_backprop(node, op);
-			graph_backprop(op);
+			graph_backprop(child);
 		}
 	}
 }
@@ -312,7 +403,6 @@ float rand_between(float a, float b)
 {
 	return a + rand_0_1() * (b - a);
 }
-
 void tensor_seed_random(int seed)
 {
 	srand(seed);
@@ -331,12 +421,16 @@ void linear_regression_example()
 {
 	tensor_seed_random(0);
 
-	tensor *x = tensor_arange(0, 6, 1);				   // (N, d)
-	tensor *y = tensor_arange(0, 6, 1);				   // (N, 1)
-	tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
-	tensor *yhat = ops_matmul(x, w);				   // (N, 1)
+	// tensor *x = tensor_arange(0, 6, 1);				   // (N, d)
+	tensor *y = tensor_arange(0, 6, 1); // (N, 1)
+	// tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
+	// tensor *yhat = ops_matmul(x, w);				   // (N, 1)
+	tensor *yhat = tensor_ones((t_shape){6, 1});
 	tensor *loss = loss_mse(y, yhat);
+	graph_backprop(loss);
 	tensor_print(loss);
+	tensor_print(yhat);
+	tensor_print(y);
 }
 
 int main()
