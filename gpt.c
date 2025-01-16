@@ -334,8 +334,7 @@ void linear_regression_example()
 	tensor *x = tensor_arange(0, 6, 1);				   // (N, d)
 	tensor *y = tensor_arange(0, 6, 1);				   // (N, 1)
 	tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
-
-	tensor *yhat = ops_matmul(x, w);
+	tensor *yhat = ops_matmul(x, w);				   // (N, 1)
 	tensor_print2d(yhat);
 }
 
