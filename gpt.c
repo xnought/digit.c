@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define DIMS_MAX 3
 
@@ -7,6 +8,7 @@ typedef struct tensor
 {
 	int shape[DIMS_MAX];
 	float *data; // points to the 1d points of data
+	float *grad;
 } tensor;
 
 void tensor_print_shape(tensor *t)
@@ -38,13 +40,22 @@ void tensor_print_data(tensor *t)
 	}
 	printf("\n");
 }
-
+void tensor_print_grad(tensor *t)
+{
+	printf("Grad:\t");
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		printf("%.2f ", t->grad[i]);
+	}
+	printf("\n");
+}
 #define tensor_print(tensor_pointer) (                    \
 	{                                                     \
 		printf("=====Tensor=====\n");                     \
 		printf("Variable Name: '" #tensor_pointer "'\n"); \
 		tensor_print_shape(tensor_pointer);               \
 		tensor_print_data(tensor_pointer);                \
+		tensor_print_grad(tensor_pointer);                \
 		printf("================\n");                     \
 	})
 
@@ -61,6 +72,7 @@ tensor *tensor_malloc()
 void tensor_free(tensor *t)
 {
 	free(t->data);
+	free(t->grad);
 	free(t);
 }
 tensor *tensor_zeros(int shape[DIMS_MAX])
@@ -72,8 +84,10 @@ tensor *tensor_zeros(int shape[DIMS_MAX])
 	}
 	int flat_length = tensor_flat_length(t);
 	t->data = tensor_malloc_data(flat_length);
+	t->grad = tensor_malloc_data(flat_length);
 	for (int i = 0; i < flat_length; i++)
 	{
+		t->grad[i] = 0.0;
 		t->data[i] = 0.0;
 	}
 	return t;
@@ -88,7 +102,6 @@ tensor *tensor_arange(float start, float stop, float step)
 	}
 	return t;
 }
-
 tensor *tensor_ones(int shape[DIMS_MAX])
 {
 	tensor *t = tensor_zeros(shape);
@@ -99,6 +112,18 @@ tensor *tensor_ones(int shape[DIMS_MAX])
 	return t;
 }
 
+tensor *tensor_sum(tensor *t)
+{
+	// forward
+	tensor *sum = tensor_zeros((int[DIMS_MAX]){1});
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		sum->data[0] += t->data[i];
+	}
+
+	return sum;
+}
+
 void linear_regression_example()
 {
 	printf("Linear Regression Example.\n");
@@ -107,7 +132,7 @@ void linear_regression_example()
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
 	tensor *x = tensor_arange(0, 10, 1);
 	tensor *y = tensor_arange(0, 10, 1);
-	tensor *y_hat = tensor_ones(y->shape);
+	tensor *y_hat = tensor_zeros(y->shape); // empty
 
 	tensor_print(x);
 	tensor_print(y);
