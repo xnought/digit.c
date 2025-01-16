@@ -145,6 +145,32 @@ tensor *tensor_add(tensor *a, tensor *b)
 	return output;
 }
 
+tensor *tensor_square(tensor *t)
+{
+	tensor *output = tensor_zeros(a->shape);
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		float t_i = t->data[i];
+		output->data[i] = t_i * t_i; // forward
+		t->grad[i] = 2 * t_i;		 // backward
+	}
+
+	return output;
+}
+
+tensor *tensor_sub(tensor *a, tensor *b)
+{
+	tensor_assert_same_shape(a, b);
+	tensor *output = tensor_zeros(a->shape);
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		output->data[i] = a->data[i] - b->data[i]; // forward
+		a->grad[i] = 1.0;						   // backward
+		b->grad[i] = -1.0;						   // backward
+	}
+	return output;
+}
+
 void linear_regression_example()
 {
 	printf("Linear Regression Example.\n");
