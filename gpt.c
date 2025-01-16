@@ -56,7 +56,7 @@ void tensor_print_grad(tensor *t)
 		tensor_print_shape(tensor_pointer);               \
 		tensor_print_data(tensor_pointer);                \
 		tensor_print_grad(tensor_pointer);                \
-		printf("================\n");                     \
+		printf("================\n\n");                   \
 	})
 
 float *tensor_malloc_data(int flat_length)
@@ -114,14 +114,35 @@ tensor *tensor_ones(int shape[DIMS_MAX])
 
 tensor *tensor_sum(tensor *t)
 {
-	// forward
-	tensor *sum = tensor_zeros((int[DIMS_MAX]){1});
+	tensor *sum = tensor_zeros((int[DIMS_MAX]){1, 1});
 	for (int i = 0; i < tensor_flat_length(t); i++)
 	{
-		sum->data[0] += t->data[i];
+		sum->data[0] += t->data[i]; // forward
+		t->grad[i] = 1.0;			// backward
 	}
 
 	return sum;
+}
+
+void tensor_assert_same_shape(tensor *a, tensor *b)
+{
+	for (int i = 0; i < DIMS_MAX; i++)
+	{
+		assert(a->shape[i] == b->shape[i]);
+	}
+}
+
+tensor *tensor_add(tensor *a, tensor *b)
+{
+	tensor_assert_same_shape(a, b);
+	tensor *output = tensor_zeros(a->shape);
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		output->data[i] = a->data[i] + b->data[i]; // forward
+		a->grad[i] = 1.0;						   // backward
+		b->grad[i] = 1.0;						   // backward
+	}
+	return output;
 }
 
 void linear_regression_example()
@@ -130,17 +151,25 @@ void linear_regression_example()
 
 	printf("1. Define the dataset to do lin reg on.\n");
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
-	tensor *x = tensor_arange(0, 10, 1);
-	tensor *y = tensor_arange(0, 10, 1);
-	tensor *y_hat = tensor_zeros(y->shape); // empty
+	tensor *x = tensor_arange(0, 5, 1);
+	tensor *y = tensor_arange(0, 5, 1);
+	// tensor *y_hat = tensor_zeros(y->shape); // empty
 
+	printf("Before\n");
 	tensor_print(x);
 	tensor_print(y);
-	tensor_print(y_hat);
+	// tensor_print(y_hat);
+
+	tensor *res = tensor_add(x, y);
+	printf("After\n");
+	tensor_print(res);
+	tensor_print(x);
+	tensor_print(y);
 
 	tensor_free(x);
 	tensor_free(y);
-	tensor_free(y_hat);
+	tensor_free(res);
+	// tensor_free(y_hat);
 }
 
 int main()
