@@ -381,6 +381,9 @@ void ops_matmul_backprop(tensor *output)
 {
 	tensor *a = output->ops_args[0];
 	tensor *b = output->ops_args[1];
+
+	// want to dL/doutput * doutput/da
+	// want to dL/doutput * doutput/db
 }
 
 void graph_backprop(tensor *output)
@@ -444,22 +447,14 @@ void linear_regression_example()
 {
 	tensor_seed_random(0);
 
-	// tensor *x = tensor_arange(0, 6, 1);				   // (N, d)
-	tensor *y = tensor_arange(0, 12, 1); // (N, 1)
-	y->shape[0] = 6;
-	y->shape[1] = 2;
-	tensor_print2d(y);
-	// tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
-	tensor *w = tensor_ones((t_shape){y->shape[1], 1}); // (d, 1)
-	tensor_print2d(w);
-
-	// tensor *w = tensor_ones((t_shape){1, 1}); // (d, 1)
-	// tensor *yhat = ops_matmul(x, w);		  // (N, 1)
-	// tensor *loss = loss_mse(y, yhat);
-	// graph_backprop(loss);
-	// tensor_print(loss);
-	// tensor_print(yhat);
-	// tensor_print(y);
+	tensor *x = tensor_arange(0, 12, 1); // (N, 2)
+	x->shape[0] = 6;
+	x->shape[1] = 2;
+	tensor *y = tensor_arange(0, 6, 1);					// (N, 1)
+	tensor *w = tensor_ones((t_shape){x->shape[1], 1}); // (2, 1)
+	tensor *yhat = ops_matmul(x, w);					// (N, 1)
+	tensor *loss = loss_mse(y, yhat);					// (1,1)
+	tensor_print2d(loss);
 }
 
 int main()
