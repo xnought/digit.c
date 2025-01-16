@@ -100,7 +100,7 @@ tensor *tensor_zeros(int shape[DIMS_MAX])
 }
 tensor *tensor_arange(float start, float stop, float step)
 {
-	float flat_length = (int)((stop - start) / step) + 1;
+	float flat_length = (int)((stop - start) / step);
 	tensor *t = tensor_zeros((int[DIMS_MAX]){flat_length, 1});
 	for (int i = 0; i < flat_length; i++)
 	{
@@ -201,6 +201,7 @@ tensor *loss_mse(tensor *a, tensor *b)
 	tensor *sub = ops_sub(a, b);
 	tensor *sqr = ops_square(sub);
 	tensor *sum = ops_sum(sqr);
+	sum->grad[0] = 1.0; // dloss/dloss = 1 obvi
 
 	return sum;
 }
@@ -238,14 +239,30 @@ void graph_free(tensor *node)
 	tensor_free(node);
 }
 
+void chain_backprop(tensor *parent, tensor *child)
+{
+	for (int i = 0; i < tensor_flat_length(child); i++)
+	{
+		if (tensor_flat_length(parent) == 1)
+		{
+			// TODO: implement mixed shaped backwards?
+			child->grad[i] *= parent->grad[0];
+		}
+		else
+		{
+			child->grad[i] *= parent->grad[i];
+		}
+	}
+}
+
 void graph_backprop(tensor *node)
 {
-	assert(false); // todo
 	for (int i = 0; i < OPS_ARGS_MAX; i++)
 	{
 		tensor *op = node->ops_args[i];
 		if (op != NULL)
 		{
+			chain_backprop(node, op);
 			graph_backprop(op);
 		}
 	}
@@ -257,12 +274,15 @@ void linear_regression_example()
 
 	printf("1. Define the dataset to do lin reg on.\n");
 	// Shaped (N points, D dimension). In this case D = 1. So just a vector.
-	// tensor *x = tensor_arange(0, 5, 1);
-	tensor *y = tensor_arange(0, 5, 1);
+	// tensor *x = tensor_arange(0, 6, 1);
+	tensor *y = tensor_arange(0, 6, 1);
 	tensor *y_hat = tensor_ones(y->shape);
 
 	tensor *loss = loss_mse(y, y_hat);
 	graph_backprop(loss);
+	tensor_print(y);
+	tensor_print(y_hat);
+	tensor_print(loss);
 	graph_free(loss);
 }
 
