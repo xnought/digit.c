@@ -13,6 +13,7 @@ typedef enum
 	SUM,
 	SQUARE,
 	SUB,
+	MATMUL,
 } op_t;
 
 typedef struct tensor
@@ -31,6 +32,9 @@ void tensor_print_op(tensor *t)
 
 	switch (t->op)
 	{
+	case MATMUL:
+		printf("MATMUL");
+		break;
 	case SUB:
 		printf("SUB");
 		break;
@@ -44,7 +48,7 @@ void tensor_print_op(tensor *t)
 		printf("NO_OP");
 		break;
 	default:
-		printf("??");
+		printf("ERROR");
 		break;
 	}
 
@@ -92,16 +96,33 @@ int tensor_index2d(tensor *t, int i, int j)
 {
 	return t->transposed ? j * t->shape[0] + i : i * t->shape[1] + j;
 }
-void tensor_print2d(tensor *m)
+void tensor_print2d_grad(tensor *m)
 {
+	printf("Grad:\n");
 	for (int i = 0; i < m->shape[0]; i++)
 	{
+		printf("\t");
+		for (int j = 0; j < m->shape[1]; j++)
+		{
+			printf("%0.2f ", m->grad[tensor_index2d(m, i, j)]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+void tensor_print2d_data(tensor *m)
+{
+	printf("Data:\n");
+	for (int i = 0; i < m->shape[0]; i++)
+	{
+		printf("\t");
 		for (int j = 0; j < m->shape[1]; j++)
 		{
 			printf("%0.2f ", m->data[tensor_index2d(m, i, j)]);
 		}
 		printf("\n");
 	}
+	printf("\n");
 }
 #define tensor_print(tensor_pointer) (                    \
 	{                                                     \
@@ -110,6 +131,17 @@ void tensor_print2d(tensor *m)
 		tensor_print_shape(tensor_pointer);               \
 		tensor_print_data(tensor_pointer);                \
 		tensor_print_grad(tensor_pointer);                \
+		tensor_print_op(tensor_pointer);                  \
+		printf("================\n\n");                   \
+	})
+
+#define tensor_print2d(tensor_pointer) (                  \
+	{                                                     \
+		printf("=====Tensor=====\n");                     \
+		printf("Variable Name: '" #tensor_pointer "'\n"); \
+		tensor_print_shape(tensor_pointer);               \
+		tensor_print2d_data(tensor_pointer);              \
+		tensor_print2d_grad(tensor_pointer);              \
 		tensor_print_op(tensor_pointer);                  \
 		printf("================\n\n");                   \
 	})
@@ -263,6 +295,7 @@ tensor *ops_matmul(tensor *a, tensor *b)
 		}
 	}
 
+	output->op = MATMUL;
 	output->ops_args[0] = a;
 	output->ops_args[1] = b;
 
@@ -313,25 +346,6 @@ void graph_free(tensor *node)
 	tensor_free(node);
 }
 
-void chain_backprop(tensor *parent, tensor *child)
-{
-	// Let's suppose the parent is y
-	// and that the child args are x @ w
-	// To get dL/dw I need to do dL/dy * dy/dw = dL/dy * x.T
-	for (int i = 0; i < tensor_flat_length(child); i++)
-	{
-		if (tensor_flat_length(parent) == 1)
-		{
-			// TODO: implement mixed shaped backwards?
-			child->grad[i] *= parent->grad[0];
-		}
-		else
-		{
-			child->grad[i] *= parent->grad[i];
-		}
-	}
-}
-
 void ops_sum_backprop(tensor *output)
 {
 	tensor *a = output->ops_args[0];
@@ -363,10 +377,19 @@ void ops_sub_backprop(tensor *output)
 	}
 }
 
+void ops_matmul_backprop(tensor *output)
+{
+	tensor *a = output->ops_args[0];
+	tensor *b = output->ops_args[1];
+}
+
 void graph_backprop(tensor *output)
 {
 	switch (output->op)
 	{
+	case MATMUL:
+		ops_matmul_backprop(output);
+		break;
 	case SUB:
 		ops_sub_backprop(output);
 		break;
@@ -422,15 +445,21 @@ void linear_regression_example()
 	tensor_seed_random(0);
 
 	// tensor *x = tensor_arange(0, 6, 1);				   // (N, d)
-	tensor *y = tensor_arange(0, 6, 1); // (N, 1)
+	tensor *y = tensor_arange(0, 12, 1); // (N, 1)
+	y->shape[0] = 6;
+	y->shape[1] = 2;
+	tensor_print2d(y);
 	// tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
-	// tensor *yhat = ops_matmul(x, w);				   // (N, 1)
-	tensor *yhat = tensor_ones((t_shape){6, 1});
-	tensor *loss = loss_mse(y, yhat);
-	graph_backprop(loss);
-	tensor_print(loss);
-	tensor_print(yhat);
-	tensor_print(y);
+	tensor *w = tensor_ones((t_shape){y->shape[1], 1}); // (d, 1)
+	tensor_print2d(w);
+
+	// tensor *w = tensor_ones((t_shape){1, 1}); // (d, 1)
+	// tensor *yhat = ops_matmul(x, w);		  // (N, 1)
+	// tensor *loss = loss_mse(y, yhat);
+	// graph_backprop(loss);
+	// tensor_print(loss);
+	// tensor_print(yhat);
+	// tensor_print(y);
 }
 
 int main()
