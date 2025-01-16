@@ -335,7 +335,8 @@ void linear_regression_example()
 	tensor *y = tensor_arange(0, 6, 1);				   // (N, 1)
 	tensor *w = tensor_random(-1, 1, (t_shape){1, 1}); // (d, 1)
 	tensor *yhat = ops_matmul(x, w);				   // (N, 1)
-	tensor_print2d(yhat);
+	tensor *loss = loss_mse(y, yhat);
+	tensor_print(loss);
 }
 
 int main()
