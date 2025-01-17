@@ -377,13 +377,80 @@ void ops_sub_backprop(tensor *output)
 	}
 }
 
+// int float_index2d(int i, int j, int shape[SHAPE_MAX], bool transposed)
+// {
+// 	// return t->transposed ? j * t->shape[0] + i : i * t->shape[1] + j;
+// 	return transposed ? j * shape[i] + i : i * shape[1] + j;
+// }
+// void float_matmul(float *result, float *a, float *b, int shape_a[SHAPE_MAX], int shape_b[SHAPE_MAX], bool transposed_a, bool transposed_b)
+// {
+// 	assert(shape_a[1] == shape_b[0]);
+
+// 	int shape_result[SHAPE_MAX] = {shape_a[0], shape_b[1]};
+// 	for (int i = 0; i < shape_a[0]; i++)
+// 	{
+// 		for (int j = 0; j < shape_b[1]; j++)
+// 		{
+// 			for (int k = 0; k < shape_a[1]; k++)
+// 			{
+// 				// output->data[tensor_index2d(output, i, j)] += a->data[tensor_index2d(a, i, k)] * b->data[tensor_index2d(b, k, j)];
+// 				result[float_index2d(i, j, shape_result, 0)] += a[float_index2d(i, k, shape_a, transposed_a)] * b[float_index2d(k, j, shape_b, transposed_b)];
+// 			}
+// 		}
+// 	}
+// }
+
+tensor *tensor_deepcopy(tensor *t)
+{
+	tensor *newt = tensor_zeros(t->shape);
+	// copy over the malloced data
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		newt->data[i] = t->data[i];
+		newt->grad[i] = t->grad[i];
+	}
+
+	// copy over the Op applied
+	// TODO
+
+	return newt;
+}
+
+tensor *ops_transpose(tensor *t)
+{
+	tensor *newt = tensor_deepcopy(t);
+	tensor_transpose(newt);
+	return newt;
+}
+
+void _chain_rule_backprop_matmul(tensor *save_result, tensor *a, tensor *b, int a_grad, int b_grad)
+{
+	float *a_float = a_grad ? a->grad : a->data;
+	float *b_float = b_grad ? b->grad : b->data;
+	for (int i = 0; i < a->shape[0]; i++)
+	{
+		for (int j = 0; j < b->shape[1]; j++)
+		{
+			for (int k = 0; k < a->shape[1]; k++)
+			{
+				save_result->grad[tensor_index2d(save_result, i, j)] += a_float[tensor_index2d(a, i, k)] * b_float[tensor_index2d(b, k, j)];
+			}
+		}
+	}
+}
+
 void ops_matmul_backprop(tensor *output)
 {
-	tensor *a = output->ops_args[0];
-	tensor *b = output->ops_args[1];
+	tensor *x = output->ops_args[0];
+	tensor *w = output->ops_args[1];
+	tensor *xT = ops_transpose(x);
+	tensor *wT = ops_transpose(w);
 
-	// want to dL/doutput * doutput/da
-	// want to dL/doutput * doutput/db
+	_chain_rule_backprop_matmul(w, xT, output, 0, 1); // dl/dw x.T @ dl/doutput
+	_chain_rule_backprop_matmul(x, output, wT, 1, 0); // dl/dx dl/doutput @ w.T
+
+	tensor_free(xT);
+	tensor_free(wT);
 }
 
 void graph_backprop(tensor *output)
@@ -447,14 +514,17 @@ void linear_regression_example()
 {
 	tensor_seed_random(0);
 
-	tensor *x = tensor_arange(0, 12, 1); // (N, 2)
-	x->shape[0] = 6;
-	x->shape[1] = 2;
-	tensor *y = tensor_arange(0, 6, 1);					// (N, 1)
-	tensor *w = tensor_ones((t_shape){x->shape[1], 1}); // (2, 1)
-	tensor *yhat = ops_matmul(x, w);					// (N, 1)
-	tensor *loss = loss_mse(y, yhat);					// (1,1)
-	tensor_print2d(loss);
+	tensor *x = tensor_arange(0, 3, 1);
+	tensor *y = tensor_arange(0, 3, 1);
+	tensor *w = tensor_zeros((t_shape){x->shape[1], 1});
+	tensor *yhat = ops_matmul(x, w);
+	tensor *loss = loss_mse(y, yhat);
+	graph_backprop(loss);
+
+	tensor_print(w);
+	tensor_print(loss);
+
+	graph_free(loss);
 }
 
 int main()
