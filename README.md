@@ -1,14 +1,6 @@
-# gptc
+# MNIST Digit classifier but in pure C
 
-GPT but in C accelerated by OpenMP.
-
-To compile and run do
-
-```bash
-./compile && ./gpt
-```
-
-or do `./run` which does that exact command.
+Do `./run` to compile and run the program.
 
 ## TODO
 
