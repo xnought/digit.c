@@ -14,6 +14,7 @@ typedef enum
 	SQUARE,
 	SUB,
 	MATMUL,
+	TRANSPOSE
 } op_t;
 
 typedef struct tensor
@@ -24,6 +25,7 @@ typedef struct tensor
 	struct tensor *ops_args[OPS_ARGS_MAX]; // tensors used in an ops function args
 	op_t op;
 	int transposed;
+	int free_after_backprop;
 } tensor;
 
 void tensor_print_op(tensor *t)
@@ -160,6 +162,7 @@ tensor *tensor_malloc()
 	}
 	t->transposed = 0;
 	t->op = NO_OP;
+	t->free_after_backprop = 1;
 	return t;
 }
 void tensor_free(tensor *t)
@@ -377,50 +380,36 @@ void ops_sub_backprop(tensor *output)
 	}
 }
 
-// int float_index2d(int i, int j, int shape[SHAPE_MAX], bool transposed)
-// {
-// 	// return t->transposed ? j * t->shape[0] + i : i * t->shape[1] + j;
-// 	return transposed ? j * shape[i] + i : i * shape[1] + j;
-// }
-// void float_matmul(float *result, float *a, float *b, int shape_a[SHAPE_MAX], int shape_b[SHAPE_MAX], bool transposed_a, bool transposed_b)
-// {
-// 	assert(shape_a[1] == shape_b[0]);
-
-// 	int shape_result[SHAPE_MAX] = {shape_a[0], shape_b[1]};
-// 	for (int i = 0; i < shape_a[0]; i++)
-// 	{
-// 		for (int j = 0; j < shape_b[1]; j++)
-// 		{
-// 			for (int k = 0; k < shape_a[1]; k++)
-// 			{
-// 				// output->data[tensor_index2d(output, i, j)] += a->data[tensor_index2d(a, i, k)] * b->data[tensor_index2d(b, k, j)];
-// 				result[float_index2d(i, j, shape_result, 0)] += a[float_index2d(i, k, shape_a, transposed_a)] * b[float_index2d(k, j, shape_b, transposed_b)];
-// 			}
-// 		}
-// 	}
-// }
-
 tensor *tensor_deepcopy(tensor *t)
 {
-	tensor *newt = tensor_zeros(t->shape);
+	// initialize new tensor with same shape
+	tensor *copy = tensor_zeros(t->shape);
+
 	// copy over the malloced data
 	for (int i = 0; i < tensor_flat_length(t); i++)
 	{
-		newt->data[i] = t->data[i];
-		newt->grad[i] = t->grad[i];
+		copy->data[i] = t->data[i];
+		copy->grad[i] = t->grad[i];
 	}
 
-	// copy over the Op applied
-	// TODO
+	//  copy over ops
+	for (int i = 0; i < OPS_ARGS_MAX; i++)
+	{
+		copy->ops_args[i] = t->ops_args[i];
+	}
+	copy->op = t->op;
+	copy->free_after_backprop = t->free_after_backprop;
 
-	return newt;
+	return copy;
 }
 
 tensor *ops_transpose(tensor *t)
 {
-	tensor *newt = tensor_deepcopy(t);
-	tensor_transpose(newt);
-	return newt;
+	tensor *copy = tensor_deepcopy(t);
+	tensor_transpose(copy);
+	copy->op = TRANSPOSE;
+	copy->ops_args[0] = t;
+	return copy;
 }
 
 void _chain_rule_backprop_matmul(tensor *save_result, tensor *a, tensor *b, int a_grad, int b_grad)
@@ -453,7 +442,7 @@ void ops_matmul_backprop(tensor *output)
 	tensor_free(wT);
 }
 
-void graph_backprop(tensor *output)
+void graph_backprop_apply(tensor *output)
 {
 	switch (output->op)
 	{
@@ -473,7 +462,6 @@ void graph_backprop(tensor *output)
 	case NO_OP:
 		return;
 	default:
-		exit(1);
 		break;
 	}
 
@@ -482,8 +470,45 @@ void graph_backprop(tensor *output)
 		tensor *child = output->ops_args[i];
 		if (child != NULL)
 		{
-			graph_backprop(child);
+			graph_backprop_apply(child);
 		}
+	}
+}
+// all tensors marked with 1 for tensor->free_after_backprop will be freed entirely. Otherwise kept
+void graph_backprop_cleanup(tensor *node)
+{
+	for (int i = 0; i < OPS_ARGS_MAX; i++)
+	{
+		tensor *op = node->ops_args[i];
+		if (op != NULL)
+		{
+			graph_backprop_cleanup(op);
+		}
+	}
+	if (node->free_after_backprop)
+	{
+		tensor_free(node);
+	}
+}
+
+void graph_backprop(tensor *node)
+{
+	graph_backprop_apply(node);
+	graph_backprop_cleanup(node);
+}
+
+// marks that we should not free these tensors
+tensor *variable(tensor *t)
+{
+	t->free_after_backprop = 0;
+	return t;
+}
+
+void zero_grad(tensor *t)
+{
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		t->grad[i] = 0.0;
 	}
 }
 
@@ -512,19 +537,24 @@ tensor *tensor_random(float a, float b, int shape[SHAPE_MAX])
 
 void linear_regression_example()
 {
-	tensor_seed_random(0);
+	tensor *x = variable(tensor_arange(0, 3, 1));
+	tensor *y = variable(tensor_arange(0, 3, 1));
+	tensor *w = variable(tensor_zeros((t_shape){x->shape[1], 1}));
 
-	tensor *x = tensor_arange(0, 3, 1);
-	tensor *y = tensor_arange(0, 3, 1);
-	tensor *w = tensor_zeros((t_shape){x->shape[1], 1});
-	tensor *yhat = ops_matmul(x, w);
-	tensor *loss = loss_mse(y, yhat);
-	graph_backprop(loss);
+	for (int i = 0; i < 10; i++)
+	{
+		tensor *yhat = ops_matmul(x, w);
+		tensor *loss = loss_mse(y, yhat);
 
-	tensor_print(w);
-	tensor_print(loss);
+		printf("Iter: %d\tLoss: %0.2f\n", i, loss->data[0]);
 
-	graph_free(loss);
+		zero_grad(w);
+		graph_backprop(loss);
+	}
+
+	tensor_free(x);
+	tensor_free(y);
+	tensor_free(w);
 }
 
 int main()
