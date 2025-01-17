@@ -1,3 +1,3 @@
 #!/bin/bash
 
-gcc digit.c -o digit
+clang digit.c -o digit -O3 

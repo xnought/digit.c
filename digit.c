@@ -10,11 +10,13 @@
 typedef enum
 {
 	NO_OP,
+	ADD,
 	SUM,
 	SQUARE,
 	SUB,
 	MATMUL,
-	TRANSPOSE
+	TRANSPOSE,
+	EXPAND
 } op_t;
 
 typedef struct tensor
@@ -34,6 +36,12 @@ void tensor_print_op(tensor *t)
 
 	switch (t->op)
 	{
+	case EXPAND:
+		printf("EXPAND");
+		break;
+	case ADD:
+		printf("ADD");
+		break;
 	case MATMUL:
 		printf("MATMUL");
 		break;
@@ -248,6 +256,7 @@ tensor *ops_add(tensor *a, tensor *b)
 		output->data[i] = a->data[i] + b->data[i];
 	}
 
+	output->op = ADD;
 	output->ops_args[0] = a;
 	output->ops_args[1] = b;
 
@@ -305,15 +314,30 @@ tensor *ops_matmul(tensor *a, tensor *b)
 	return output;
 }
 
+tensor *ops_expand(tensor *t, int shape[SHAPE_MAX])
+{
+	tensor *e = tensor_zeros(shape);
+	for (int i = 0; i < tensor_flat_length(e); i++)
+	{
+		e->data[i] = t->data[0];
+	}
+
+	e->op = EXPAND;
+	e->ops_args[0] = t;
+
+	return e;
+}
+
+void ops_expand_backward(tensor *output)
+{
+	tensor *a = output->ops_args[0];
+	a->grad[0] = output->grad[0];
+}
+
 tensor *loss_mse(tensor *a, tensor *b)
 {
 	tensor_assert_same_shape(a, b);
-
-	tensor *sub = ops_sub(a, b);
-	tensor *sqr = ops_square(sub);
-	tensor *sum = ops_sum(sqr);
-
-	return sum;
+	return ops_sum(ops_square(ops_sub(a, b)));
 }
 
 void tensor_zero_grad(tensor *t)
@@ -379,6 +403,18 @@ void ops_sub_backprop(tensor *output)
 		b->grad[i] *= output->grad[i]; // chain rule
 	}
 }
+void ops_add_backprop(tensor *output)
+{
+	tensor *a = output->ops_args[0];
+	tensor *b = output->ops_args[1];
+	for (int i = 0; i < tensor_flat_length(a); i++)
+	{
+		a->grad[i] = 1.0;			   // local
+		b->grad[i] = 1.0;			   // local
+		a->grad[i] *= output->grad[i]; // chain rule
+		b->grad[i] *= output->grad[i]; // chain rule
+	}
+}
 
 tensor *tensor_deepcopy(tensor *t)
 {
@@ -410,6 +446,14 @@ tensor *ops_transpose(tensor *t)
 	copy->op = TRANSPOSE;
 	copy->ops_args[0] = t;
 	return copy;
+}
+void ops_transpose_backward(tensor *t)
+{
+	tensor *a = t->ops_args[0];
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		a->grad[i] = t->grad[i];
+	}
 }
 
 void _chain_rule_backprop_matmul(tensor *save_result, tensor *a, tensor *b, int a_grad, int b_grad)
@@ -446,6 +490,15 @@ void graph_backprop_apply(tensor *output)
 {
 	switch (output->op)
 	{
+	case EXPAND:
+		ops_expand_backward(output);
+		break;
+	case TRANSPOSE:
+		ops_transpose_backward(output);
+		break;
+	case ADD:
+		ops_add_backprop(output);
+		break;
 	case MATMUL:
 		ops_matmul_backprop(output);
 		break;
@@ -498,7 +551,7 @@ void graph_backprop(tensor *node)
 }
 
 // marks that we should not free these tensors
-tensor *variable(tensor *t)
+tensor *keep(tensor *t)
 {
 	t->free_after_backprop = 0;
 	return t;
@@ -543,11 +596,11 @@ void optim_sgd(tensor *t, float lr)
 	}
 }
 
-void linear_regression_example()
+void example_linear_regression_example_no_bias()
 {
-	tensor *x = variable(tensor_arange(0, 3, 1));
-	tensor *y = variable(tensor_arange(0, 3, 1));
-	tensor *w = variable(tensor_zeros((t_shape){x->shape[1], 1}));
+	tensor *x = keep(tensor_arange(0, 3, 1));
+	tensor *y = keep(tensor_arange(0, 3, 1));
+	tensor *w = keep(tensor_zeros((t_shape){x->shape[1], 1}));
 	float lr = 0.05;
 
 	for (int i = 0; i < 10; i++)
@@ -569,8 +622,89 @@ void linear_regression_example()
 	tensor_free(w);
 }
 
+void voptim_sgd(int size, tensor *t[], float lr)
+{
+	for (int i = 0; i < size; i++)
+	{
+		optim_sgd(t[i], lr);
+	}
+}
+void vzero_grad(int size, tensor *t[])
+{
+	for (int i = 0; i < size; i++)
+	{
+		zero_grad(t[i]);
+	}
+}
+void vtensor_free(int size, tensor *t[])
+{
+	for (int i = 0; i < size; i++)
+	{
+		tensor_free(t[i]);
+	}
+}
+
+// frees all nested tensors except for the result and unlinks the ops
+void _no_grad_free(tensor *node)
+{
+	for (int i = 0; i < OPS_ARGS_MAX; i++)
+	{
+		tensor *op = node->ops_args[i];
+		if (op != NULL)
+		{
+			_no_grad_free(op);
+			tensor_free(op);
+		}
+	}
+}
+tensor *no_grad(tensor *node)
+{
+	_no_grad_free(node);
+	node->op = NO_OP;
+	for (int i = 0; i < OPS_ARGS_MAX; i++)
+	{
+		node->ops_args[i] = NULL;
+	}
+	return node;
+}
+
+void example_linear_regression()
+{
+	tensor_seed_random(0);
+
+	int N = 10000;
+	tensor *x = keep(no_grad(tensor_arange(0, N, 1)));
+	tensor *y = keep(no_grad(ops_add(tensor_arange(0, N, 1), tensor_random(-1, 1, x->shape))));
+	tensor *w = keep(tensor_random(-1, 1, (t_shape){1, 1}));
+	tensor *b = keep(tensor_random(-0.1, 0.1, (t_shape){1, 1}));
+
+	int num_params = 2;
+	tensor *params[] = {w, b};
+	float lr = 0.0000000000001;
+
+	for (int i = 0; i < 1000; i++)
+	{
+		tensor *yhat = ops_add(ops_matmul(x, w), ops_expand(b, y->shape)); // yhat = wx+b
+		tensor *loss = loss_mse(y, yhat);
+		printf("Iter: %d\tLoss: %0.2f\n", i, loss->data[0]);
+
+		vzero_grad(num_params, params);
+		graph_backprop(loss);
+		voptim_sgd(num_params, params, lr);
+	}
+
+	printf("\nFinal answer for the linear equation\n");
+	tensor_print(w);
+	tensor_print(b);
+
+	tensor_free(x);
+	tensor_free(y);
+	vtensor_free(num_params, params);
+}
+
 int main()
 {
-	linear_regression_example();
+	// example_linear_regression_example_no_bias();
+	example_linear_regression();
 	return 0;
 }
