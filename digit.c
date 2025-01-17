@@ -535,22 +535,34 @@ tensor *tensor_random(float a, float b, int shape[SHAPE_MAX])
 	return t;
 }
 
+void optim_sgd(tensor *t, float lr)
+{
+	for (int i = 0; i < tensor_flat_length(t); i++)
+	{
+		t->data[i] -= lr * t->grad[i];
+	}
+}
+
 void linear_regression_example()
 {
 	tensor *x = variable(tensor_arange(0, 3, 1));
 	tensor *y = variable(tensor_arange(0, 3, 1));
 	tensor *w = variable(tensor_zeros((t_shape){x->shape[1], 1}));
+	float lr = 0.05;
 
 	for (int i = 0; i < 10; i++)
 	{
 		tensor *yhat = ops_matmul(x, w);
 		tensor *loss = loss_mse(y, yhat);
-
 		printf("Iter: %d\tLoss: %0.2f\n", i, loss->data[0]);
 
 		zero_grad(w);
 		graph_backprop(loss);
+		optim_sgd(w, lr);
 	}
+
+	printf("\nFinal answer for the linear equation\n");
+	tensor_print(w);
 
 	tensor_free(x);
 	tensor_free(y);
