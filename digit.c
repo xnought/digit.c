@@ -672,17 +672,23 @@ void example_linear_regression()
 {
 	tensor_seed_random(0);
 
-	int N = 10000;
+	int N = 100;
 	tensor *x = keep(no_grad(tensor_arange(0, N, 1)));
-	tensor *y = keep(no_grad(ops_add(tensor_arange(0, N, 1), tensor_random(-1, 1, x->shape))));
-	tensor *w = keep(tensor_random(-1, 1, (t_shape){1, 1}));
+	tensor *y = keep(no_grad(tensor_arange(0, N, 1)));
+	// normalize x and y by N
+	for (int i = 0; i < tensor_flat_length(x); i++)
+	{
+		x->data[i] /= N;
+		y->data[i] /= N;
+	}
+	tensor *w = keep(tensor_random(-0.1, 0.1, (t_shape){1, 1}));
 	tensor *b = keep(tensor_random(-0.1, 0.1, (t_shape){1, 1}));
 
 	int num_params = 2;
 	tensor *params[] = {w, b};
-	float lr = 0.0000000000001;
+	float lr = 0.01;
 
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 50; i++)
 	{
 		tensor *yhat = ops_add(ops_matmul(x, w), ops_expand(b, y->shape)); // yhat = wx+b
 		tensor *loss = loss_mse(y, yhat);
